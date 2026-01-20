@@ -53,9 +53,18 @@ fn environment() -> &'static str {
 }
 
 pub fn sentry_init_once() {
+    // Only initialize Sentry if DSN is explicitly provided via environment variable
+    let dsn = match env::var("SENTRY_DSN") {
+        Ok(dsn) if !dsn.is_empty() => dsn,
+        _ => {
+            tracing::info!("Sentry DSN not configured. Error reporting disabled.");
+            return;
+        }
+    };
+
     INIT_GUARD.get_or_init(|| {
         sentry::init((
-            "https://d6e4c45af2b081fadb10fb0ba726ccaf@o4509603705192449.ingest.de.sentry.io/4510305669283920",
+            dsn,
             sentry::ClientOptions {
                 release: sentry::release_name!(),
                 environment: Some(environment().into()),

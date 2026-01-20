@@ -19,21 +19,27 @@ import {
   matchRoutes,
 } from 'react-router-dom';
 
-Sentry.init({
-  dsn: 'https://1065a1d276a581316999a07d5dffee26@o4509603705192449.ingest.de.sentry.io/4509605576441937',
-  tracesSampleRate: 1.0,
-  environment: import.meta.env.MODE === 'development' ? 'dev' : 'production',
-  integrations: [
-    Sentry.reactRouterV6BrowserTracingIntegration({
-      useEffect: React.useEffect,
-      useLocation,
-      useNavigationType,
-      createRoutesFromChildren,
-      matchRoutes,
-    }),
-  ],
-});
-Sentry.setTag('source', 'frontend');
+// Only initialize Sentry if DSN is explicitly provided via environment variable
+const sentryEnabled = !!import.meta.env.VITE_SENTRY_DSN;
+if (sentryEnabled) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    tracesSampleRate: 1.0,
+    environment: import.meta.env.MODE === 'development' ? 'dev' : 'production',
+    integrations: [
+      Sentry.reactRouterV6BrowserTracingIntegration({
+        useEffect: React.useEffect,
+        useLocation,
+        useNavigationType,
+        createRoutesFromChildren,
+        matchRoutes,
+      }),
+    ],
+  });
+  Sentry.setTag('source', 'frontend');
+} else {
+  console.info('Sentry DSN not configured. Error reporting disabled.');
+}
 
 if (
   import.meta.env.VITE_POSTHOG_API_KEY &&
@@ -53,6 +59,23 @@ if (
   );
 }
 
+// Error boundary component that works with or without Sentry
+function ErrorBoundary({ children }: { children: React.ReactNode }) {
+  if (sentryEnabled) {
+    return (
+      <Sentry.ErrorBoundary
+        fallback={<p>{i18n.t('common:states.error')}</p>}
+        showDialog
+      >
+        {children}
+      </Sentry.ErrorBoundary>
+    );
+  }
+  // When Sentry is disabled, just render children directly
+  // React's built-in error handling will still work
+  return <>{children}</>;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -66,16 +89,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <PostHogProvider client={posthog}>
-        <Sentry.ErrorBoundary
-          fallback={<p>{i18n.t('common:states.error')}</p>}
-          showDialog
-        >
+        <ErrorBoundary>
           <ClickToComponent />
           <VibeKanbanWebCompanion />
           <App />
           {/*<TanStackDevtools plugins={[FormDevtoolsPlugin()]} />*/}
           {/* <ReactQueryDevtools initialIsOpen={false} /> */}
-        </Sentry.ErrorBoundary>
+        </ErrorBoundary>
       </PostHogProvider>
     </QueryClientProvider>
   </React.StrictMode>
